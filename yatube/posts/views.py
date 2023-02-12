@@ -8,55 +8,47 @@ from .forms import PostForm, CommentForm
 from .utils import create_paginator
 
 
-INDEX_POSTS_LIMIT = 10
-GROUP_POSTS_LIMIT = 10
-PROFILE_POSTS_LIMIT = 10
+POSTS_LIMIT = 10
 
 
 @cache_page(20, key_prefix="index_page")
 def index(request):
-    template = 'posts/index.html'
     posts = Post.objects.all()
-    page_obj = create_paginator(request, posts, INDEX_POSTS_LIMIT)
+    page_obj = create_paginator(request, posts, POSTS_LIMIT)
     context = {
         'page_obj': page_obj
     }
-    return render(request, template, context)
+    return render(request, 'posts/index.html', context)
 
 
 def group_posts(request, slug):
-    template = 'posts/group_list.html'
     group = get_object_or_404(Group, slug=slug)
     posts = group.posts.all()
-    page_obj = create_paginator(request, posts, GROUP_POSTS_LIMIT)
+    page_obj = create_paginator(request, posts, POSTS_LIMIT)
     context = {
         'page_obj': page_obj,
         'group': group,
     }
-    return render(request, template, context)
+    return render(request, 'posts/group_list.html', context)
 
 
 def profile(request, username):
-    template = 'posts/profile.html'
     author = get_object_or_404(User, username=username)
     posts = author.posts.all()
-    page_obj = create_paginator(request, posts, PROFILE_POSTS_LIMIT)
-    if request.user.is_authenticated:
-        following = Follow.objects.filter(
-            user=request.user, author=author
-        ).exists()
-    else:
-        following = False
+    page_obj = create_paginator(request, posts, POSTS_LIMIT)
+    following = (
+        request.user.is_authenticated
+        and Follow.objects.filter(user=request.user, author=author).exists()
+    )
     context = {
-        'author': author,
-        'page_obj': page_obj,
-        'following': following,
+        "author": author,
+        "page_obj": page_obj,
+        "following": following,
     }
-    return render(request, template, context)
+    return render(request, "posts/profile.html", context)
 
 
 def post_detail(request, post_id):
-    template = 'posts/post_detail.html'
     post = get_object_or_404(Post, id=post_id)
     form = CommentForm(request.POST or None)
     comments = post.comments.all()
@@ -65,12 +57,11 @@ def post_detail(request, post_id):
         'form': form,
         'comments': comments,
     }
-    return render(request, template, context)
+    return render(request, 'posts/post_detail.html', context)
 
 
 @login_required
 def post_create(request):
-    template = 'posts/post_create.html'
     if request.POST:
         form = PostForm(
             request.POST or None,
@@ -86,12 +77,11 @@ def post_create(request):
     context = {
         'form': form,
     }
-    return render(request, template, context)
+    return render(request, 'posts/post_create.html', context)
 
 
 @login_required
 def post_edit(request, post_id):
-    template = 'posts/post_create.html'
     post = get_object_or_404(Post, id=post_id)
     if post.author != request.user:
         return redirect('posts:post_detail', post_id=post_id)
@@ -108,7 +98,7 @@ def post_edit(request, post_id):
         'is_edit': True,
         'form': form,
     }
-    return render(request, template, context)
+    return render(request, 'posts/post_create.html', context)
 
 
 @login_required
@@ -126,7 +116,7 @@ def add_comment(request, post_id):
 @login_required
 def follow_index(request):
     post_list = Post.objects.filter(author__following__user=request.user)
-    page_obj = create_paginator(request, post_list, PROFILE_POSTS_LIMIT)
+    page_obj = create_paginator(request, post_list, POSTS_LIMIT)
     context = {
         'page_obj': page_obj
     }
@@ -145,9 +135,6 @@ def profile_follow(request, username):
 
 @login_required
 def profile_unfollow(request, username):
-    # Дизлайк, отписка
-    author = get_object_or_404(User, username=username)
-    is_follower = Follow.objects.filter(user=request.user, author=author)
-    if is_follower.exists():
-        is_follower.delete()
-    return redirect('posts:profile', username=author)
+    unfollow_author = get_object_or_404(User, username=username)
+    Follow.objects.filter(user=request.user, author=unfollow_author).delete()
+    return redirect("posts:profile", username=username)

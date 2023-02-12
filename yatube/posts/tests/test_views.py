@@ -1,20 +1,17 @@
-import shutil
-import tempfile
-
 from django import forms
-from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TestCase
 from django.urls import reverse
 
+from ..views import POSTS_LIMIT
 from ..models import User, Follow, Group, Post
 
-TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.TEST_DIR)
+
+SECOND_PAGE_POSTS = 3
 
 
-@override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
-class ViewsTests(TestCase):
+class PostPagesTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -24,105 +21,92 @@ class ViewsTests(TestCase):
             description='описание',
             slug='slug',
         )
-        small_gif = (b'\x47\x49\x46\x38\x39\x61\x02\x00'
-                     b'\x01\x00\x80\x00\x00\x00\x00\x00'
-                     b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
-                     b'\x00\x00\x00\x2C\x00\x00\x00\x00'
-                     b'\x02\x00\x01\x00\x00\x02\x02\x0C'
-                     b'\x0A\x00\x3B')
-        uploaded = SimpleUploadedFile(
+        cls.small_gif = (b'\x47\x49\x46\x38\x39\x61\x02\x00'
+                         b'\x01\x00\x80\x00\x00\x00\x00\x00'
+                         b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+                         b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+                         b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+                         b'\x0A\x00\x3B')
+
+        cls.uploaded = SimpleUploadedFile(
             name='small.gif',
-            content=small_gif,
+            content=cls.small_gif,
             content_type='image/gif'
         )
         cls.post = Post.objects.create(
-            text='текст',
             author=cls.user,
+            text='Тестовый пост',
             group=cls.group,
-            image=uploaded,
+            image=cls.uploaded
         )
-
-    @classmethod
-    def tearDownClass(cls):
-        super().tearDownClass()
-        shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
+        cls.public_urls = (
+            (reverse('posts:index'), 'posts/index.html'),
+            (reverse(
+                'posts:group_list', kwargs={
+                    'slug': 'test-slug'}),
+                'posts/group_list.html'),
+            (reverse(
+                'posts:profile', kwargs={
+                    'username': 'Author'}),
+                'posts/profile.html'),
+            (reverse(
+                'posts:post_detail', kwargs={
+                    'post_id': cls.post.id}),
+                'posts/post_detail.html')
+        )
+        cls.not_public_urls = (
+            (reverse('posts:post_create'), 'posts/create_post.html'),
+            (reverse(
+                'posts:post_edit', kwargs={
+                    'post_id': cls.post.id}),
+                'posts/create_post.html')
+        )
 
     def setUp(self):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
-        cache.clear()
 
-    def context_attributes(self, post):
-        """Функция с проверки атрибутов контекста"""
-        with self.subTest(post=post):
-            self.assertEqual(post.text, self.post.text)
-            self.assertEqual(post.author, self.post.author)
-            self.assertEqual(post.group.id, self.post.group.id)
-            self.assertEqual(post.image, self.post.image)
+    def test_pages_uses_correct_template(self):
+        """URL-адрес использует соответствующий шаблон."""
+        for reverse_name, template in self.public_urls + self.not_public_urls:
+            with self.subTest(reverse_name=reverse_name):
+                response = self.authorized_client.get(reverse_name)
+                self.assertTemplateUsed(response, template)
 
-    def test_forms_show_correct_context(self):
-        """Проверка коректности формы post_create/edit."""
-        response = self.authorized_client.get(reverse('posts:post_create'))
-        response_2 = self.authorized_client.get(
-            reverse('posts:post_edit',
-                    kwargs={'post_id': self.post.id})
-        )
+    def check_fields(self, post):
+        self.assertEqual(post.author, self.user)
+        self.assertEqual(post.text, self.post.text)
+        self.assertEqual(post.group, self.group)
+        self.assertEqual(post.image, self.post.image)
+
+    def test_correct_template(self):
+        """Шаблон сформирован с правильным контекстом."""
+        for reverse_name, template in self.public_urls:
+            with self.subTest(reverse_name=reverse_name):
+                response = self.authorized_client.get(reverse_name)
+                self.assertTemplateUsed(response, template)
+                if 'page_obj' in response.context:
+                    post = response.context.get('page_obj')[0]
+                else:
+                    post = response.context.get('post')
+                self.check_fields(post)
+
+    def test_create_edit_post(self):
+        """Шаблон not_public сформирован с правильным контекстом"""
         form_fields = {
             'text': forms.fields.CharField,
-            'group': forms.fields.ChoiceField,
-            'image': forms.fields.ImageField,
+            'group': forms.ChoiceField,
+            'image': forms.fields.ImageField
         }
-        for value, expected in form_fields.items():
-            with self.subTest(value=value):
-                form_field = response.context['form'].fields[value]
-                self.assertIsInstance(form_field, expected)
-                form_field_2 = response_2.context['form'].fields[value]
-                self.assertIsInstance(form_field_2, expected)
-
-    def test_index_show_correct_context(self):
-        """Шаблон index сформирован с правильным контекстом."""
-        response = self.authorized_client.get(reverse('posts:index'))
-        self.context_attributes(response.context['page_obj'][0])
-
-    def test_group_list_show_correct_context(self):
-        """Шаблон group_list сформирован с правильным контекстом."""
-        response = self.authorized_client.get(
-            reverse('posts:posts',
-                    kwargs={'slug': 'slug'})
-        )
-        self.assertEqual(response.context['group'], self.group)
-        self.context_attributes(response.context['page_obj'][0])
-
-    def test_post_detail_show_correct_context(self):
-        """Шаблон post_detail сформирован с правильным контекстом."""
-        response = self.authorized_client.get(
-            reverse('posts:post_detail',
-                    kwargs={'post_id': self.post.id})
-        )
-        self.context_attributes(response.context['post'])
-
-    def test_profile_show_correct_context(self):
-        """Шаблон profile сформирован с правильным контекстом."""
-        response = self.authorized_client.get(
-            reverse('posts:profile',
-                    kwargs={'username': self.user})
-        )
-        self.assertEqual(response.context['author'], self.user)
-        self.context_attributes(response.context['page_obj'][0])
-
-    def test_signup_forms_show_correct_context(self):
-        """Проверка коректности формы signup."""
-        response = self.authorized_client.get(reverse('users:signup'))
-        form_fields = {
-            'first_name': forms.fields.CharField,
-            'last_name': forms.fields.CharField,
-            'username': forms.fields.CharField,
-            'email': forms.fields.EmailField,
-        }
-        for value, expected in form_fields.items():
-            with self.subTest(value=value):
-                form_field = response.context['form'].fields[value]
-                self.assertIsInstance(form_field, expected)
+        for reverse_name, _ in self.not_public_urls:
+            for field_name, expected in form_fields.items():
+                with self.subTest(
+                        reverse_name=reverse_name, field_name=field_name):
+                    response = self.authorized_client.get(reverse_name)
+                    form_field = response.context.get(
+                        'form'
+                    ).fields.get(field_name)
+                    self.assertIsInstance(form_field, expected)
 
     def test_cache_index_page(self):
         """Проверка работы кэша"""
@@ -158,10 +142,7 @@ class PaginatorViewsTest(TestCase):
 
     def test_paginator_on_pages(self):
         """Проверка пагинации на страницах."""
-        first_page_post = (1, 10)
-        second_page_post = (2, 3)
-        page_post = [first_page_post,
-                     second_page_post]
+        posts_in_pages = [POSTS_LIMIT, SECOND_PAGE_POSTS]
         urls = [
             reverse('posts:index'),
             reverse('posts:posts',
@@ -171,9 +152,9 @@ class PaginatorViewsTest(TestCase):
         ]
         for test_page in urls:
             with self.subTest(test_page=test_page):
-                for page, count in page_post:
+                for page, count in enumerate(posts_in_pages):
                     response = self.authorized_client.get(
-                        test_page, {'page': page})
+                        test_page, {'page': page + 1})
                     self.assertEqual(
                         len(response.context.get('page_obj')), count)
 

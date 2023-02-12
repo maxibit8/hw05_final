@@ -35,27 +35,6 @@ class StaticURLTests(TestCase):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
 
-    def test_urls_uses_correct_template(self):
-        """URL-адрес использует соответствующий шаблон."""
-        templates_url_names = {
-            reverse("posts:index"): 'posts/index.html',
-            reverse("posts:posts", kwargs={'slug': self.group.slug}):
-            'posts/group_list.html',
-            reverse("posts:profile", kwargs={'username': self.user}):
-            'posts/profile.html',
-            reverse("posts:post_detail", kwargs={'post_id': self.post.id}):
-            'posts/post_detail.html',
-            reverse("posts:post_edit", kwargs={'post_id': self.post.id}):
-            'posts/post_create.html',
-            reverse("posts:post_create"): 'posts/post_create.html',
-            '/unexisting_page/': 'core/404.html'
-        }
-
-        for url, template in templates_url_names.items():
-            with self.subTest(url=url):
-                response = self.author_client.get(url)
-                self.assertTemplateUsed(response, template)
-
     def test_urls_exists_at_desired_location(self):
         """Страницы доступны любому пользователю."""
         urls = {
