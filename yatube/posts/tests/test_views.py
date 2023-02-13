@@ -42,12 +42,12 @@ class PostPagesTests(TestCase):
         cls.public_urls = (
             (reverse('posts:index'), 'posts/index.html'),
             (reverse(
-                'posts:group_list', kwargs={
-                    'slug': 'test-slug'}),
+                'posts:posts', kwargs={
+                    'slug': cls.group.slug}),
                 'posts/group_list.html'),
             (reverse(
                 'posts:profile', kwargs={
-                    'username': 'Author'}),
+                    'username': cls.post.author}),
                 'posts/profile.html'),
             (reverse(
                 'posts:post_detail', kwargs={
@@ -55,16 +55,17 @@ class PostPagesTests(TestCase):
                 'posts/post_detail.html')
         )
         cls.not_public_urls = (
-            (reverse('posts:post_create'), 'posts/create_post.html'),
+            (reverse('posts:post_create'), 'posts/post_create.html'),
             (reverse(
                 'posts:post_edit', kwargs={
                     'post_id': cls.post.id}),
-                'posts/create_post.html')
+                'posts/post_create.html')
         )
 
     def setUp(self):
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        cache.clear()
 
     def test_pages_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
@@ -79,19 +80,18 @@ class PostPagesTests(TestCase):
         self.assertEqual(post.group, self.group)
         self.assertEqual(post.image, self.post.image)
 
-    def test_correct_template(self):
-        """Шаблон сформирован с правильным контекстом."""
-        for reverse_name, template in self.public_urls:
+    def test_public_contest(self):
+        """Шаблон public сформирован с правильным контекстом"""
+        for reverse_name, _ in self.public_urls:
             with self.subTest(reverse_name=reverse_name):
                 response = self.authorized_client.get(reverse_name)
-                self.assertTemplateUsed(response, template)
                 if 'page_obj' in response.context:
                     post = response.context.get('page_obj')[0]
                 else:
                     post = response.context.get('post')
                 self.check_fields(post)
 
-    def test_create_edit_post(self):
+    def test_not_public_contest(self):
         """Шаблон not_public сформирован с правильным контекстом"""
         form_fields = {
             'text': forms.fields.CharField,
@@ -119,6 +119,9 @@ class PostPagesTests(TestCase):
         Post.objects.filter(text='Текст кэша').delete()
         response = self.authorized_client.get(reverse('posts:index'))
         self.assertEqual(delete_post, response.content)
+        cache.clear()
+        response_clear = self.authorized_client.get(reverse('posts:index'))
+        self.assertNotEqual(response_clear.content, response.content)
 
 
 class PaginatorViewsTest(TestCase):

@@ -10,7 +10,7 @@ from .utils import create_paginator
 
 POSTS_LIMIT = 10
 
-
+ 
 @cache_page(20, key_prefix="index_page")
 def index(request):
     posts = Post.objects.all()
