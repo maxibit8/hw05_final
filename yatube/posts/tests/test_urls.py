@@ -27,6 +27,33 @@ class StaticURLTests(TestCase):
             group=cls.group,
         )
 
+        cls.public_urls = {
+            reverse("posts:index"): HTTPStatus.OK,
+            reverse("posts:posts", kwargs={
+                'slug': cls.group.slug}):
+            HTTPStatus.OK,
+            reverse("posts:profile", kwargs={
+                'username': cls.user}):
+            HTTPStatus.OK,
+            reverse("posts:post_detail", kwargs={
+                'post_id': cls.post.id}):
+            HTTPStatus.OK,
+            '/unexisting_page/': HTTPStatus.NOT_FOUND,
+        }
+
+        cls.not_public_urls = {
+            reverse("posts:post_edit", kwargs={'post_id': cls.post.id}):
+            HTTPStatus.FOUND,
+            reverse("posts:post_create"): HTTPStatus.OK,
+            reverse("posts:add_comment", kwargs={
+                'post_id': cls.post.id}): HTTPStatus.FOUND,
+            reverse("posts:follow_index"): HTTPStatus.OK,
+            reverse("posts:profile_follow", kwargs={
+                'username': cls.author}): HTTPStatus.FOUND,
+            reverse("posts:profile_unfollow", kwargs={
+                'username': cls.author}): HTTPStatus.FOUND,
+        }
+
     def setUp(self):
         cache.clear()
         self.guest_client = Client()
@@ -37,39 +64,16 @@ class StaticURLTests(TestCase):
 
     def test_urls_exists_at_desired_location(self):
         """Страницы доступны любому пользователю."""
-        urls = {
-            reverse("posts:index"): HTTPStatus.OK,
-            reverse("posts:posts", kwargs={'slug': self.group.slug}):
-            HTTPStatus.OK,
-            reverse("posts:profile", kwargs={'username': self.user}):
-            HTTPStatus.OK,
-            reverse("posts:post_detail", kwargs={'post_id': self.post.id}):
-            HTTPStatus.OK,
-            '/unexisting_page/': HTTPStatus.NOT_FOUND,
-        }
-        for url, http_status in urls.items():
-            with self.subTest(url=url):
-                response = self.guest_client.get(url)
+        for reverse_name, http_status in self.public_urls.items():
+            with self.subTest(reverse_name=reverse_name):
+                response = self.authorized_client.get(reverse_name)
                 self.assertEqual(response.status_code, http_status)
 
     def test_urls_exists_at_desired_location_authorized(self):
         """Страницы доступны авторизованному пользователю."""
-        urls = {
-            reverse("posts:index"): HTTPStatus.OK,
-            reverse("posts:posts", kwargs={'slug': self.group.slug}):
-            HTTPStatus.OK,
-            reverse("posts:profile", kwargs={'username': self.user}):
-            HTTPStatus.OK,
-            reverse("posts:post_detail", kwargs={'post_id': self.post.id}):
-            HTTPStatus.OK,
-            reverse("posts:post_edit", kwargs={'post_id': self.post.id}):
-            HTTPStatus.FOUND,
-            reverse("posts:post_create"): HTTPStatus.OK,
-        }
-
-        for url, http_status in urls.items():
-            with self.subTest(url=url):
-                response = self.authorized_client.get(url)
+        for reverse_name, http_status in self.not_public_urls.items():
+            with self.subTest(reverse_name=reverse_name):
+                response = self.authorized_client.get(reverse_name)
                 self.assertEqual(response.status_code, http_status)
 
     def test_post_edit_author(self):

@@ -5,9 +5,18 @@ User = get_user_model()
 
 
 class Group(models.Model):
-    title = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=50, unique=True)
+    title = models.CharField(
+        verbose_name='Заголовок группы',
+        max_length=200)
+
+    slug = models.SlugField(
+        verbose_name='Метка группы',
+        max_length=50, unique=True)
     description = models.TextField()
+
+    class Meta:
+        verbose_name = 'Группа'
+        verbose_name_plural = 'Группы'
 
     def __str__(self):
         return self.title
@@ -39,9 +48,10 @@ class Post(models.Model):
     )
 
     image = models.ImageField(
-        'Картинка',
+        verbose_name='Картинка',
         upload_to='posts/',
         blank=True
+
     )
 
     class Meta:
@@ -67,13 +77,17 @@ class Comment(models.Model):
         verbose_name='Автор'
     )
     text = models.TextField(
-        'Текст комментария',
+        verbose_name='Текст комментария',
         help_text='Введите текст комментария'
     )
     created = models.DateTimeField(
         verbose_name='Дата комментария',
         auto_now_add=True
     )
+
+    class Meta:
+        verbose_name = 'Коментарий'
+        verbose_name_plural = 'Коментарии'
 
     def __str__(self):
         return self.text
@@ -94,8 +108,11 @@ class Follow(models.Model):
     )
 
     class Meta:
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "author"], name="unique_follow"
-            ),
+                fields=["user", "author"],
+                name="unique_follow"
+            )
         ]

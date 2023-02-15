@@ -3,8 +3,8 @@ from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.conf import settings
 
-from ..views import POSTS_LIMIT
 from ..models import User, Follow, Group, Post
 
 
@@ -134,7 +134,7 @@ class PaginatorViewsTest(TestCase):
             description='описание',
             slug='test_slug',
         )
-        sort_test_post = 13
+        sort_test_post = settings.POSTS_LIMIT + SECOND_PAGE_POSTS
         list_post = [
             Post(text=f'текст {i}',
                  author=cls.user,
@@ -145,7 +145,7 @@ class PaginatorViewsTest(TestCase):
 
     def test_paginator_on_pages(self):
         """Проверка пагинации на страницах."""
-        posts_in_pages = [POSTS_LIMIT, SECOND_PAGE_POSTS]
+        posts_in_pages = [settings.POSTS_LIMIT, SECOND_PAGE_POSTS]
         urls = [
             reverse('posts:index'),
             reverse('posts:posts',
@@ -172,6 +172,11 @@ class FollowViewTest(TestCase):
             text='текст',
             author=cls.user
         )
+        cls.url_profile_follow = reverse('posts:profile_follow', kwargs={
+            'username': cls.user})
+        cls.url_profile_unfollow = reverse('posts:profile_unfollow', kwargs={
+            'username': cls.user})
+        cls.url_follow_index = reverse('posts:follow_index')
 
     def setUp(self):
         cache.clear()
@@ -183,18 +188,15 @@ class FollowViewTest(TestCase):
     def test_follow(self):
         """Проверка подписки на автора"""
         self.follower_client.get(
-            reverse('posts:profile_follow',
-                    kwargs={'username': self.user}))
+            self.url_profile_follow)
         self.assertEqual(Follow.objects.all().count(), 1)
 
     def test_unfollow(self):
         """Проверка отписки от автора"""
         self.follower_client.get(
-            reverse('posts:profile_follow',
-                    kwargs={'username': self.user}))
+            self.url_profile_follow)
         self.follower_client.get(
-            reverse('posts:profile_unfollow',
-                    kwargs={'username': self.user}))
+            self.url_profile_unfollow)
         self.assertEqual(Follow.objects.all().count(), 0)
 
     def test_post_follow_unfollow(self):
@@ -203,8 +205,8 @@ class FollowViewTest(TestCase):
             user=self.follower,
             author=self.user)
         response = self.follower_client.get(
-            reverse('posts:follow_index'))
+            self.url_follow_index)
         self.assertIn(self.post, response.context['page_obj'].object_list)
         response = self.author_client.get(
-            reverse('posts:follow_index'))
+            self.url_follow_index)
         self.assertNotIn(self.post, response.context['page_obj'].object_list)
